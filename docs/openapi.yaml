@@ -4,14 +4,9 @@ info:
   version: '1.0.0'
   description: >-
     OpenAPI 3.1 specification for MoveGo. This document reflects the
-    database schema and API specification defined in docs/database.md and
-    docs/api-specification.md. JWT authentication and refresh-token flows
-    are supported.
+    database schema and API expectations defined in docs/database.md.
 servers:
   - url: /api/v1
-security:
-  - bearerAuth: []
-
 components:
   securitySchemes:
     bearerAuth:
@@ -44,8 +39,10 @@ components:
           type: integer
         next_page:
           type: integer
+          nullable: true
         prev_page:
           type: integer
+          nullable: true
     User:
       type: object
       properties:
@@ -69,7 +66,9 @@ components:
         updated_at:
           type: string
           format: date-time
-      required: [id, email]
+      required:
+        - id
+        - email
     Driver:
       type: object
       properties:
@@ -161,7 +160,11 @@ components:
         updated_at:
           type: string
           format: date-time
-      required: [id, passenger_id, status, fare_cents]
+      required:
+        - id
+        - passenger_id
+        - status
+        - fare_cents
     TripLocation:
       type: object
       properties:
@@ -174,13 +177,10 @@ components:
         location:
           type: object
           properties:
-            type:
-              type: string
-              example: Point
-            coordinates:
-              type: array
-              items:
-                type: number
+            lat:
+              type: number
+            lng:
+              type: number
         recorded_at:
           type: string
           format: date-time
@@ -223,7 +223,12 @@ components:
         updated_at:
           type: string
           format: date-time
-      required: [id, user_id, amount_cents, currency, status]
+      required:
+        - id
+        - user_id
+        - amount_cents
+        - currency
+        - status
     Wallet:
       type: object
       properties:
@@ -412,17 +417,6 @@ components:
         minimum: 1
         maximum: 100
         default: 25
-    sortByParam:
-      name: sort_by
-      in: query
-      schema:
-        type: string
-    orderParam:
-      name: order
-      in: query
-      schema:
-        type: string
-        enum: [asc, desc]
     latParam:
       name: lat
       in: query
@@ -440,6 +434,12 @@ components:
         type: integer
         default: 1000
   responses:
+    ErrorResponse:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     RateLimitHeaders:
       description: Rate limit headers
       headers:
@@ -452,12 +452,12 @@ components:
         X-RateLimit-Reset:
           schema:
             type: integer
-
 paths:
   /auth/register:
     post:
-      summary: Register a user
+      summary: Register a new user
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -489,15 +489,12 @@ paths:
                       verification_required:
                         type: boolean
         '400':
-          description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponseResponseResponse'
+          $ref: '#/components/responses/ErrorResponse'
   /auth/login:
     post:
       summary: Login
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -525,15 +522,12 @@ paths:
                       expires_in:
                         type: integer
         '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponseResponseResponse'
+          $ref: '#/components/responses/ErrorResponse'
   /auth/refresh:
     post:
       summary: Refresh access token
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -557,11 +551,7 @@ paths:
                       refresh_token:
                         type: string
         '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponseResponseResponse'
+          $ref: '#/components/responses/ErrorResponse'
   /users/me:
     get:
       summary: Get current user
@@ -573,17 +563,15 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/User'
         '401':
-          $ref: '#/components/schemas/ErrorResponseResponseResponse'
+          $ref: '#/components/responses/ErrorResponse'
     put:
       summary: Update current user
       security:
         - bearerAuth: []
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -601,13 +589,12 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/User'
   /users:
     get:
       summary: List users (admin)
+      security:
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/pageParam'
         - $ref: '#/components/parameters/perPageParam'
@@ -615,11 +602,19 @@ paths:
           in: query
           schema:
             type: string
-      security:
-        - bearerAuth: []
       responses:
         '200':
           description: OK
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+            X-RateLimit-Reset:
+              schema:
+                type: integer
           content:
             application/json:
               schema:
@@ -634,6 +629,8 @@ paths:
   /users/{id}:
     get:
       summary: Get user by id (admin)
+      security:
+        - bearerAuth: []
       parameters:
         - name: id
           in: path
@@ -641,28 +638,50 @@ paths:
           schema:
             type: string
             format: uuid
-      security:
-        - bearerAuth: []
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/User'
         '404':
-          description: Not Found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponseResponseResponse'
+          $ref: '#/components/responses/ErrorResponse'
+  /drivers:
+    post:
+      summary: Apply as driver
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: string
+                  format: uuid
+                cpf:
+                  type: string
+                cnh_number:
+                  type: string
+                vehicle:
+                  type: object
+      responses:
+        '201':
+          description: Created
+    get:
+      summary: List drivers
+      parameters:
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/perPageParam'
+      responses:
+        '200':
+          description: OK
   /drivers/apply:
     post:
       summary: Driver apply
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -696,10 +715,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Driver'
+                $ref: '#/components/schemas/Driver'
   /drivers/{id}/status:
     patch:
       summary: Update driver status (admin)
@@ -713,6 +729,7 @@ paths:
             type: string
             format: uuid
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -728,6 +745,7 @@ paths:
     post:
       summary: Set driver availability
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -769,16 +787,28 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Driver'
+  /vehicles:
+    post:
+      summary: Add vehicle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Vehicle'
+      responses:
+        '201':
+          description: Created
   /trips:
     post:
       summary: Create trip (idempotent)
       parameters:
-        - name: Idempotency-Key
-          in: header
+        - in: header
+          name: Idempotency-Key
           schema:
             type: string
-          required: true
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -822,11 +852,24 @@ paths:
                   data:
                     $ref: '#/components/schemas/Trip'
         '409':
-          description: Conflict (idempotency)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponseResponseResponse'
+          $ref: '#/components/responses/ErrorResponse'
+    get:
+      summary: List trips
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: passenger_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/pageParam'
+        - $ref: '#/components/parameters/perPageParam'
+      responses:
+        '200':
+          description: OK
   /trips/{id}:
     get:
       summary: Get trip
@@ -843,14 +886,12 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Trip'
+                $ref: '#/components/schemas/Trip'
   /trips/{id}/accept:
     post:
       summary: Driver accepts trip
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -863,7 +904,7 @@ paths:
         '200':
           description: OK
         '409':
-          description: Conflict
+          $ref: '#/components/responses/ErrorResponse'
   /trips/{id}/start:
     post:
       summary: Mark trip started
@@ -880,6 +921,7 @@ paths:
     post:
       summary: Cancel trip
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -897,6 +939,7 @@ paths:
     post:
       summary: Push trip location (fallback REST ingestion)
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -923,16 +966,28 @@ paths:
                       $ref: '#/components/schemas/TripLocation'
                   meta:
                     $ref: '#/components/schemas/PaginationMeta'
+  /trips/{id}/ratings:
+    post:
+      summary: Rate trip
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Rating'
+      responses:
+        '201':
+          description: Created
   /payments/charge:
     post:
       summary: Charge payment
       parameters:
-        - name: Idempotency-Key
-          in: header
+        - in: header
+          name: Idempotency-Key
           schema:
             type: string
-          required: true
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -979,6 +1034,19 @@ paths:
     post:
       summary: Stripe webhook receiver
       requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+  /webhooks/payments:
+    post:
+      summary: Payment provider webhooks
+      requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -1007,6 +1075,7 @@ paths:
     post:
       summary: Transfer in wallet
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -1023,10 +1092,6 @@ paths:
       responses:
         '200':
           description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WalletTransaction'
   /coupons/{code}:
     get:
       summary: Get coupon by code
@@ -1047,6 +1112,7 @@ paths:
     post:
       summary: Use coupon
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -1061,10 +1127,6 @@ paths:
       responses:
         '201':
           description: Created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CouponUsage'
   /coupon_usages:
     get:
       summary: List coupon usages
@@ -1094,7 +1156,10 @@ paths:
           description: OK
     post:
       summary: Create notification (admin)
+      security:
+        - bearerAuth: []
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -1115,54 +1180,27 @@ paths:
       responses:
         '200':
           description: OK
-  /trips/{id}/ratings:
-    post:
-      summary: Rate trip
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Rating'
-      responses:
-        '201':
-          description: Created
   /audit_logs:
     get:
       summary: List audit logs (admin)
+      security:
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/pageParam'
         - $ref: '#/components/parameters/perPageParam'
-      security:
-        - bearerAuth: []
       responses:
         '200':
           description: OK
-  /audit_logs:
-    post:
-      summary: Create audit log (internal)
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AuditLog'
-      responses:
-        '201':
-          description: Created
   /refresh_tokens:
     get:
-      summary: List refresh tokens (admin)
-      parameters:
-        - name: user_id
-          in: query
-          schema:
-            type: string
-            format: uuid
+      summary: List refresh tokens
       responses:
         '200':
           description: OK
     post:
       summary: Revoke refresh token
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -1170,7 +1208,6 @@ paths:
               properties:
                 token_id:
                   type: string
-                  format: uuid
       responses:
         '200':
           description: OK
@@ -1178,6 +1215,7 @@ paths:
     post:
       summary: Register idempotency key
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -1188,960 +1226,9 @@ paths:
                 user_id:
                   type: string
                   format: uuid
-
-          type: string
-          format: uuid
-        email:
-          type: string
-          format: email
-        phone:
-          type: string
-        name:
-          type: string
-        photo_url:
-          type: string
-        metadata:
-          type: object
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-      required: [id,email]
-    Driver:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        user_id:
-          type: string
-          format: uuid
-        cpf:
-          type: string
-        cnh_number:
-          type: string
-        status:
-          type: string
-          enum: [pending, approved, blocked]
-        online:
-          type: boolean
-        rating:
-          type: number
-          format: float
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-    Vehicle:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        driver_id:
-          type: string
-          format: uuid
-        plate:
-          type: string
-        model:
-          type: string
-        color:
-          type: string
-        year:
-          type: integer
-        document_url:
-          type: string
-    Trip:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        passenger_id:
-          type: string
-          format: uuid
-        driver_id:
-          nullable: true
-          type: string
-          format: uuid
-        status:
-          type: string
-          enum: [requested, accepted, enroute, in_progress, completed, cancelled]
-        fare_cents:
-          type: integer
-        commission_cents:
-          type: integer
-        start_time:
-          type: string
-          format: date-time
-        end_time:
-          type: string
-          format: date-time
-        distance_meters:
-          type: integer
-        duration_seconds:
-          type: integer
-        route:
-          type: object
-          description: GeoJSON object (LineString or MultiPoint)
-        metadata:
-          type: object
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-    TripLocation:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        trip_id:
-          type: string
-          format: uuid
-        location:
-          type: object
-          properties:
-            lat:
-              type: number
-            lng:
-              type: number
-        recorded_at:
-          type: string
-          format: date-time
-        type:
-          type: string
-          enum: [pickup, dropoff, waypoint, ping]
-    Payment:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        trip_id:
-          nullable: true
-          type: string
-          format: uuid
-        user_id:
-          type: string
-          format: uuid
-        amount_cents:
-          type: integer
-        currency:
-          type: string
-          default: BRL
-        status:
-          type: string
-          enum: [pending, succeeded, failed, refunded]
-        provider:
-          type: string
-          enum: [stripe, pix, wallet]
-        provider_payment_id:
-          type: string
-        idempotency_key:
-          type: string
-        metadata:
-          type: object
-        created_at:
-          type: string
-          format: date-time
-    Wallet:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        user_id:
-          type: string
-          format: uuid
-        balance_cents:
-          type: integer
-        currency:
-          type: string
-    WalletTransaction:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        wallet_id:
-          type: string
-          format: uuid
-        amount_cents:
-          type: integer
-        type:
-          type: string
-        reference_id:
-          type: string
-        metadata:
-          type: object
-        created_at:
-          type: string
-          format: date-time
-    Rating:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        trip_id:
-          type: string
-          format: uuid
-        rater_id:
-          type: string
-          format: uuid
-        ratee_id:
-          type: string
-          format: uuid
-        score:
-          type: integer
-          minimum: 1
-          maximum: 5
-        comment:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-    Coupon:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        code:
-          type: string
-        type:
-          type: string
-          enum: [percent, fixed]
-        amount:
-          type: number
-        expires_at:
-          type: string
-          format: date-time
-        usage_limit:
-          type: integer
-    CouponUsage:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        coupon_id:
-          type: string
-          format: uuid
-        user_id:
-          type: string
-          format: uuid
-        payment_id:
-          type: string
-          format: uuid
-        used_at:
-          type: string
-          format: date-time
-    Notification:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        user_id:
-          type: string
-          format: uuid
-        type:
-          type: string
-        payload:
-          type: object
-        read:
-          type: boolean
-        created_at:
-          type: string
-          format: date-time
-    AuditLog:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        actor_id:
-          type: string
-          format: uuid
-        action:
-          type: string
-        entity:
-          type: string
-        entity_id:
-          type: string
-          format: uuid
-        before:
-          type: object
-        after:
-          type: object
-        created_at:
-          type: string
-          format: date-time
-    RefreshToken:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        user_id:
-          type: string
-          format: uuid
-        revoked:
-          type: boolean
-        expires_at:
-          type: string
-          format: date-time
-        created_at:
-          type: string
-          format: date-time
-    IdempotencyKey:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        key:
-          type: string
-        user_id:
-          type: string
-          format: uuid
-        created_at:
-          type: string
-          format: date-time
-  responses:
-    ErrorResponse:
-      description: Error
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-
-paths:
-  /auth/register:
-    post:
-      summary: Register a new user
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                email: { type: string, format: email }
-                phone: { type: string }
-                password: { type: string }
-                name: { type: string }
       responses:
         '201':
           description: Created
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: object
-                    properties:
-                      user_id: { type: string, format: uuid }
-                      verification_required: { type: boolean }
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-  /auth/login:
-    post:
-      summary: Login user
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                email_or_phone: { type: string }
-                password: { type: string }
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: object
-                    properties:
-                      access_token: { type: string }
-                      refresh_token: { type: string }
-                      expires_in: { type: integer }
-        '401':
-          $ref: '#/components/responses/ErrorResponse'
-  /auth/refresh:
-    post:
-      summary: Refresh access token
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                refresh_token: { type: string }
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: object
-                    properties:
-                      access_token: { type: string }
-                      refresh_token: { type: string }
-        '401':
-          $ref: '#/components/responses/ErrorResponse'
-  /users/me:
-    get:
-      summary: Get current user
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-        '401':
-          $ref: '#/components/responses/ErrorResponse'
-    put:
-      summary: Update current user
-      security:
-        - bearerAuth: []
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                name: { type: string }
-                photo_url: { type: string }
-                metadata: { type: object }
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-  /users:
-    get:
-      summary: List users (admin)
-      parameters:
-        - in: query
-          name: search
-          schema: { type: string }
-        - in: query
-          name: page
-          schema: { type: integer, default: 1 }
-        - in: query
-          name: per_page
-          schema: { type: integer, default: 25 }
-      responses:
-        '200':
-          description: OK
-          headers:
-            X-Rate-Limit-Limit:
-              schema: { type: integer }
-            X-Rate-Limit-Remaining:
-              schema: { type: integer }
-            X-Rate-Limit-Reset:
-              schema: { type: integer }
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/User'
-                  meta:
-                    $ref: '#/components/schemas/PaginationMeta'
-  /users/{id}:
-    get:
-      summary: Get user by id (admin)
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-        '404':
-          $ref: '#/components/responses/ErrorResponse'
-  /drivers:
-    post:
-      summary: Apply as driver
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                user_id: { type: string, format: uuid }
-                cpf: { type: string }
-                cnh_number: { type: string }
-                vehicle: { type: object }
-      responses:
-        '201':
-          description: Created
-    get:
-      summary: List drivers
-      parameters:
-        - in: query
-          name: page
-          schema: { type: integer }
-        - in: query
-          name: per_page
-          schema: { type: integer }
-      responses:
-        '200':
-          description: OK
-  /drivers/{id}:
-    get:
-      summary: Get driver
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Driver'
-  /drivers/{id}/availability:
-    post:
-      summary: Set driver availability
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                online: { type: boolean }
-                lat: { type: number }
-                lng: { type: number }
-      responses:
-        '200':
-          description: OK
-  /drivers/nearby:
-    get:
-      summary: Find nearby drivers
-      parameters:
-        - in: query
-          name: lat
-          schema: { type: number }
-        - in: query
-          name: lng
-          schema: { type: number }
-        - in: query
-          name: radius_m
-          schema: { type: integer }
-        - in: query
-          name: limit
-          schema: { type: integer, default: 10 }
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Driver'
-  /vehicles:
-    post:
-      summary: Add vehicle
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Vehicle'
-      responses:
-        '201':
-          description: Created
-  /trips:
-    post:
-      summary: Create trip (idempotent)
-      parameters:
-        - in: header
-          name: Idempotency-Key
-          schema: { type: string }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                passenger_id: { type: string, format: uuid }
-                pickup: 
-                  type: object
-                  properties:
-                    lat: { type: number }
-                    lng: { type: number }
-                dropoff:
-                  type: object
-                  properties:
-                    lat: { type: number }
-                    lng: { type: number }
-                scheduled_at: { type: string, format: date-time }
-                payment_method: { type: string }
-                coupon_code: { type: string }
-                metadata: { type: object }
-      responses:
-        '201':
-          description: Created
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Trip'
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
-    get:
-      summary: List trips
-      parameters:
-        - in: query
-          name: status
-          schema: { type: string }
-        - in: query
-          name: passenger_id
-          schema: { type: string, format: uuid }
-        - in: query
-          name: page
-          schema: { type: integer }
-        - in: query
-          name: per_page
-          schema: { type: integer }
-      responses:
-        '200':
-          description: OK
-  /trips/{id}:
-    get:
-      summary: Get trip
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Trip'
-  /trips/{id}/accept:
-    post:
-      summary: Driver accepts trip
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                driver_id: { type: string, format: uuid }
-      responses:
-        '200':
-          description: OK
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
-  /trips/{id}/start:
-    post:
-      summary: Start trip
-      responses:
-        '200':
-          description: OK
-  /trips/{id}/complete:
-    post:
-      summary: Complete trip
-      responses:
-        '200':
-          description: OK
-  /trips/{id}/cancel:
-    post:
-      summary: Cancel trip
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                actor_id: { type: string }
-                reason: { type: string }
-      responses:
-        '200':
-          description: OK
-  /trips/{id}/locations:
-    post:
-      summary: Push trip location (fallback)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TripLocation'
-      responses:
-        '201':
-          description: Created
-    get:
-      summary: Get trip locations (paginated)
-      parameters:
-        - in: query
-          name: page
-          schema: { type: integer }
-        - in: query
-          name: per_page
-          schema: { type: integer }
-      responses:
-        '200':
-          description: OK
-  /payments/charge:
-    post:
-      summary: Charge payment (idempotent)
-      parameters:
-        - in: header
-          name: Idempotency-Key
-          schema: { type: string }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                trip_id: { type: string }
-                user_id: { type: string }
-                amount_cents: { type: integer }
-                currency: { type: string }
-                provider: { type: string }
-      responses:
-        '202':
-          description: Accepted
-  /payments/{id}:
-    get:
-      summary: Get payment
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: OK
-  /webhooks/payments:
-    post:
-      summary: Payment provider webhooks (Stripe etc.)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        '200':
-          description: OK
-  /wallets/{user_id}:
-    get:
-      summary: Get wallet by user
-      parameters:
-        - in: path
-          name: user_id
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Wallet'
-  /wallets/{user_id}/transfer:
-    post:
-      summary: Transfer to/from wallet
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                amount_cents: { type: integer }
-                type: { type: string }
-                reference_id: { type: string }
-      responses:
-        '200':
-          description: OK
-  /coupons/{code}:
-    get:
-      summary: Get coupon by code
-      parameters:
-        - in: path
-          name: code
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Coupon'
-  /coupons/{id}/use:
-    post:
-      summary: Use coupon
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                user_id: { type: string }
-                payment_id: { type: string }
-      responses:
-        '201':
-          description: Created
-  /coupon_usages:
-    get:
-      summary: List coupon usages
-      parameters:
-        - in: query
-          name: user_id
-          schema: { type: string }
-        - in: query
-          name: coupon_id
-          schema: { type: string }
-      responses:
-        '200':
-          description: OK
-  /notifications:
-    get:
-      summary: List notifications
-      parameters:
-        - in: query
-          name: user_id
-          schema: { type: string }
-        - in: query
-          name: unread_only
-          schema: { type: boolean }
-      responses:
-        '200':
-          description: OK
-    post:
-      summary: Create notification (admin)
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Notification'
-      responses:
-        '201':
-          description: Created
-  /notifications/{id}/mark-read:
-    post:
-      summary: Mark notification read
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: OK
-  /trips/{id}/ratings:
-    post:
-      summary: Rate trip
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Rating'
-      responses:
-        '201':
-          description: Created
-  /audit_logs:
-    get:
-      summary: List audit logs (admin)
-      parameters:
-        - in: query
-          name: entity
-          schema: { type: string }
-        - in: query
-          name: entity_id
-          schema: { type: string }
-      responses:
-        '200':
-          description: OK
-  /refresh_tokens:
-    get:
-      summary: List refresh tokens (admin)
-      parameters:
-        - in: query
-          name: user_id
-          schema: { type: string }
-      responses:
-        '200':
-          description: OK
-    post:
-      summary: Revoke refresh token
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                token_id: { type: string }
-      responses:
-        '200':
-          description: OK
-  /idempotency_keys:
-    post:
-      summary: Register idempotency key
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                key: { type: string }
-      responses:
-        '201':
-          description: Created
-
-
 externalDocs:
   description: Project requirements and DB schema
   url: ../docs/database.md
