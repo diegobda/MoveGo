@@ -1,4 +1,5 @@
 # 🚖 MoveGo
+##Desenvolvido por Diego dos Santos - ##Goiânia
 
 Plataforma de mobilidade urbana inspirada em Uber, 99 e InDrive, desenvolvida com arquitetura moderna baseada em Flutter, NestJS, PostgreSQL e AWS.
 
